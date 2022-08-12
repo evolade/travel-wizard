@@ -1,128 +1,88 @@
 const express = require('express')
-const fetch = require('node-fetch')
 const cors = require("cors")
 const app = express()
 app.use(cors())
 require("dotenv").config()
 
+const HotelService = require("./services/HotelService")
 
-const fetchIt = async (host, url) => {
-    const options = {
-        method: 'GET',
-        headers: {
-            'X-RapidAPI-Key': process.env.API_KEY,
-            'X-RapidAPI-Host': host
-        }
-    };
-
-    const res = await fetch(url, options)
-    return res.json()
-}
+app.get("/", (req, res) => {
+    res.send("/ <br /> /search?city=Berlin & currency=EUR <br /> /other?id=123456&country=Germany <br /> /fake")
+})
 
 app.get("/search", async (req, res) => {
     const city = req.query.city
     const currency = req.query.currency
 
+    const destinationId = await HotelService.search(city)
+    //TODO postman headersına local ülke ekleyebilirim
+    const rate = await HotelService.rate(currency)
 
-    const searchRes = await fetchIt("hotels4.p.rapidapi.com", `https://hotels4.p.rapidapi.com/locations/v2/search?query=${city}&locale=en_US&currency=USD`)
-    const destinationId = searchRes.suggestions[0].entities[0].destinationId
-
-
-    const listRes = await fetchIt("hotels4.p.rapidapi.com", `https://hotels4.p.rapidapi.com/properties/list?destinationId=${destinationId}&pageNumber=1&pageSize=1&checkIn=2022-08-10&checkOut=2022-08-20&adults1=1&sortOrder=BEST_SELLER&locale=en_US&currency=USD`)
-
+    const list = await HotelService.list(destinationId)
     let result = {
         hotels: [],
-
     }
+    
+    const country = HotelService.country(city)
 
-    //const currencyResj = await fetchIt("fixer-fixer-currency-v1.p.rapidapi.com", `https://fixer-fixer-currency-v1.p.rapidapi.com/convert?from=USD&to=${currency}&amount=${now.ratePlan.price.exactCurrent}`)
-    const rateRes = await fetchIt("fixer-fixer-currency-v1.p.rapidapi.com", "https://fixer-fixer-currency-v1.p.rapidapi.com/latest?base=USD&symbols=" + currency)
-    const rate = rateRes.rates[currency]
+    for (let i = 0; i < list.data.body.searchResults.results.length; i++) {
+        const results = list.data.body.searchResults.results[i] // hotel 
 
-    const countryRes = await fetchIt("spott.p.rapidapi.com", `https://spott.p.rapidapi.com/places/autocomplete?limit=2&skip=0&q=${city}&type=CITY`)
-    const country = countryRes[0].country.name
-
-
-
-    result.header = listRes.data.body.header
-
-
-
-    for (let i = 0; i < listRes.data.body.searchResults.results.length; i++) {
-
-        const results = listRes.data.body.searchResults.results[i] // hotel 
-
-
-        const imagesRes = await fetchIt("hotels4.p.rapidapi.com", 'https://hotels4.p.rapidapi.com/properties/get-hotel-photos?id=' + results.id)
+        const imagesRes = await HotelService.images(results.id)
 
         result.hotels.push({
             id: results.id,
             name: results.name,
             star: results.starRating,
             price: `${results.ratePlan.price.exactCurrent * rate} ${currency}`,
-            priceChanged: `${(results.ratePlan.price.old * rate) - (results.ratePlan.price.exactCurrent * rate)} ` ?? "null",
-            coors: results.coordinate,
+            oldPrice: results.ratePlan.price.old * rate ?? results.ratePlan.price.exactCurrent * rate ,
             address: results.address,
-            image: imagesRes.hotelImages[0].baseUrl.slice(0, -10) + "l.jpg",
+            image: imagesRes.hotelImages[0].baseUrl.slice(0, -10) + "g.jpg",
             country: country,
         })
-
     }
     res.send(result)
-
-
-
 })
-
-
-
 
 app.get("/other", async (req, res) => {
     const id = req.query.id
     const country = req.query.country
 
-    const imagesUrl = 'https://hotels4.p.rapidapi.com/properties/get-hotel-photos?id=' + id;
-
-    const imagesOptions = {
-        method: 'GET',
-        headers: {
-            'X-RapidAPI-Key': process.env.API_KEY,
-            'X-RapidAPI-Host': 'hotels4.p.rapidapi.com'
-        }
-    };
-
-
-    const imagesRes = await fetch(imagesUrl, imagesOptions)
-    const imagesResj = await imagesRes.json()
-
-    const covidRes = await fetchIt("covid-19-tracking.p.rapidapi.com", `https://covid-19-tracking.p.rapidapi.com/v1/${country}`)
-
-    const populationRes = await fetchIt("world-population.p.rapidapi.com", `https://world-population.p.rapidapi.com/population?country_name=${country}`)
+    const imagesRes = await HotelService.images(id)
+    const covidRes = await HotelService.covid(country)
+    const populationRes = await HotelService.population(country)
 
     result = {
         images: []
     }
 
     const deadliness = (parseInt(covidRes["Total Deaths_text"].replaceAll(",", "")) / parseInt(covidRes["Total Cases_text"].replaceAll(",", ""))) * 100
-    const rate = parseInt(covidRes["Total Cases_text"].replaceAll(",", "")) / parseInt(populationRes.body.population)
-    console.log(deadliness)
-    console.log(rate)
+    const ratio = parseInt(covidRes["Total Cases_text"].replaceAll(",", "")) / parseInt(populationRes.body.population)
 
     result.covid = {
         cases: covidRes["Total Cases_text"],
         deaths: covidRes["Total Deaths_text"],
         recovered: covidRes["Total Recovered_text"],
-        rate: (deadliness + rate) / 2
+        ratio: (deadliness + ratio) / 2
     }
     //const len = imagesResj.hotelImages.length
     const len = 5
 
     for (let i = 0; i < len; i++) {
-        result.images.push(imagesResj.hotelImages[i].baseUrl.slice(0, -10) + "l.jpg")
-
+        result.images.push(imagesRes.hotelImages[i].baseUrl.slice(0, -10) + "g.jpg")
     }
     res.send(result)
 })
+
+
+
+
+
+
+
+
+
+
 
 app.get("/fake", (req, res) => {
     const result = {
@@ -166,12 +126,30 @@ app.get("/fake", (req, res) => {
     res.send(result)
 })
 
+app.get("/otherfake", (req, res) => {
+    const result = {
 
+        covid: {
+            cases: 1234,
+            deaths: 12,
+            recovered: 123,
+            ratio: 0.8,
+
+        },
+
+        images: [
+            "https://exp.cdn-hotels.com/hotels/37000000/36790000/36789900/36789845/d4aada11_l.jpg",
+            "https://exp.cdn-hotels.com/hotels/37000000/36790000/36789900/36789845/a6dcbfc2_l.jpg",
+            "https://exp.cdn-hotels.com/hotels/37000000/36790000/36789900/36789845/29d90922_l.jpg",
+            "https://exp.cdn-hotels.com/hotels/37000000/36790000/36789900/36789845/895ded4a_l.jpg",
+            "https://exp.cdn-hotels.com/hotels/37000000/36790000/36789900/36789845/d4b10c49_l.jpg"
+        ],
+
+
+    }
+    res.send(result)
+})
 
 app.listen(8080, () => console.log("localhost:8080"))
 
-
-
-
-
-module.exports = app;
+module.exports = app; // vercel
