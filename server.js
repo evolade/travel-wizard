@@ -14,19 +14,26 @@ app.get("/search", async (req, res) => {
     const city = req.query.city
     const currency = req.query.currency
 
-    const destinationId = await HotelService.search(city)
-    //TODO postman headersına local ülke ekleyebilirim
-    const rate = await HotelService.rate(currency)
+    let rate
+    let list
+    let country
 
-    const list = await HotelService.list(destinationId)
+    try {
+        const destinationId = await HotelService.search(city)
+        rate = await HotelService.rate(currency)
+        list = await HotelService.list(destinationId)
+        country = await HotelService.country(city)
+
+    } catch (e) {
+        res.send("USER ERROR: " + e)
+        return
+    }
     let result = {
         hotels: [],
     }
-    
-    const country = HotelService.country(city)
 
-    for (let i = 0; i < list.data.body.searchResults.results.length; i++) {
-        const results = list.data.body.searchResults.results[i] // hotel 
+    for (let i = 0; i < list.length; i++) {
+        const results = list[i]
 
         const imagesRes = await HotelService.images(results.id)
 
@@ -35,11 +42,15 @@ app.get("/search", async (req, res) => {
             name: results.name,
             star: results.starRating,
             price: `${results.ratePlan.price.exactCurrent * rate} ${currency}`,
-            oldPrice: results.ratePlan.price.old * rate ?? results.ratePlan.price.exactCurrent * rate ,
+            oldPrice: results.ratePlan.price.old * rate ?? results.ratePlan.price.exactCurrent * rate,
             address: results.address,
             image: imagesRes.hotelImages[0].baseUrl.slice(0, -10) + "g.jpg",
             country: country,
         })
+    }
+    if (result.hotels.length == 0) {
+        res.send("USER ERROR")
+        return
     }
     res.send(result)
 })
@@ -48,16 +59,34 @@ app.get("/other", async (req, res) => {
     const id = req.query.id
     const country = req.query.country
 
-    const imagesRes = await HotelService.images(id)
-    const covidRes = await HotelService.covid(country)
-    const populationRes = await HotelService.population(country)
+    let imagesRes
+    let covidRes
+    let populationRes
+
+    try {
+        populationRes = await HotelService.population(country)
+        covidRes = await HotelService.covid(country)
+        imagesRes = await HotelService.images(id)
+
+    } catch (e) {
+        res.send("USER ERROR: " + e)
+        return
+    }
 
     result = {
         images: []
     }
 
     const deadliness = (parseInt(covidRes["Total Deaths_text"].replaceAll(",", "")) / parseInt(covidRes["Total Cases_text"].replaceAll(",", ""))) * 100
-    const ratio = parseInt(covidRes["Total Cases_text"].replaceAll(",", "")) / parseInt(populationRes.body.population)
+    let ratio
+
+    try {
+        ratio = parseInt(covidRes["Total Cases_text"].replaceAll(",", "")) / parseInt(populationRes.body.population)
+
+    } catch (e) {
+        res.send("COUNTRY NOT FOUND: " + e)
+        return
+    }
 
     result.covid = {
         cases: covidRes["Total Cases_text"],
@@ -68,21 +97,17 @@ app.get("/other", async (req, res) => {
     //const len = imagesResj.hotelImages.length
     const len = 5
 
-    for (let i = 0; i < len; i++) {
-        result.images.push(imagesRes.hotelImages[i].baseUrl.slice(0, -10) + "g.jpg")
+    try {
+        for (let i = 0; i < len; i++) {
+            result.images.push(imagesRes.hotelImages[i].baseUrl.slice(0, -10) + "g.jpg")
+        }
+
+    } catch (e) {
+        res.send("USER ERROR: " + e)
+        return
     }
     res.send(result)
 })
-
-
-
-
-
-
-
-
-
-
 
 app.get("/fake", (req, res) => {
     const result = {
@@ -150,6 +175,6 @@ app.get("/otherfake", (req, res) => {
     res.send(result)
 })
 
-app.listen(8080, () => console.log("localhost:8080"))
+app.listen(8080, () => console.log("http://localhost:8080"))
 
 module.exports = app; // vercel

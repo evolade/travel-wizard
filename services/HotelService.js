@@ -21,6 +21,7 @@ const HotelService = {
     rate: async (currency) => {
         const rateRes = await fetchIt("fixer-fixer-currency-v1.p.rapidapi.com", "https://fixer-fixer-currency-v1.p.rapidapi.com/latest?base=USD&symbols=" + currency)
         return rateRes.rates[currency]
+        
     },
 
     country: async (city) => {
@@ -29,8 +30,9 @@ const HotelService = {
     },
 
     list: async (destinationId) => {
-        //TODO! checkin out
-        return await fetchIt("hotels4.p.rapidapi.com", `https://hotels4.p.rapidapi.com/properties/list?destinationId=${destinationId}&pageNumber=1&pageSize=4&checkIn=2022-08-13&checkOut=2022-08-20&adults1=1&sortOrder=BEST_SELLER&locale=en_US&currency=USD`)
+        // TODO! checkin out
+        const listRes = await fetchIt("hotels4.p.rapidapi.com", `https://hotels4.p.rapidapi.com/properties/list?destinationId=${destinationId}&pageNumber=1&pageSize=4&checkIn=2022-08-20&checkOut=2022-08-30&adults1=1&sortOrder=BEST_SELLER&locale=en_US&currency=USD`)
+        return listRes.data.body.searchResults.results
     },
 
     images: async (id) => {
